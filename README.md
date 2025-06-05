@@ -1,6 +1,6 @@
 # Flam_assignment
 ## SET 1
-* I have chosen questions 1,2 and 4 of set 1
+* I have chosen questions 1, 2 and 4 of set 1
 ## Question 1
 
 * Data Structure Design: I use a custom Node class with key, value, and bidirectional pointers, along with dummy nodes (left and right) that act as permanent head and tail markers, simplifying insertion and deletion operations by eliminating edge case handling. 
@@ -18,333 +18,360 @@
 * Remove Operation: I locate the target bucket, linearly search for the key, and use vector.erase() to remove the element when found, effectively deleting the key-value pair from the map. 
 
 ## Question 4
-# Solar System WebGL Visualization
+# Solar System WebGL
 
-A comprehensive 3D solar system simulation built with pure WebGL, demonstrating advanced graphics programming concepts including custom shaders, matrix transformations, and interactive camera controls.
-
-![Solar System Demo](https://via.placeholder.com/800x400/000033/ffffff?text=Interactive+Solar+System+WebGL)
-
-## 🌟 Features
-
-### Visual Elements
-- **☀️ Animated Sun** with pulsing glow and rim lighting effects
-- **🌍 Earth** with realistic orbital mechanics and axial rotation
-- **🌙 Moon** orbiting Earth with nested transformations
-- **🔴 Mars** with independent orbital characteristics
-- **Real-time lighting** with Phong shading model
-- **Smooth animations** running at 30+ FPS
-
-### Interactive Controls
-- **Mouse drag** to rotate camera around the solar system
-- **Mouse scroll** to zoom in/out (5-50 unit range)
-- **Touch support** for mobile devices
-- **Constrained camera** preventing gimbal lock
-
-### Technical Features
-- **Custom GLSL shaders** for realistic rendering
-- **Efficient WebGL rendering** with VBOs/VAOs
-- **Matrix transformation pipeline** for 3D positioning
-- **Real-time FPS monitoring**
-- **Responsive design** adapting to any screen size
-
-## 🏗️ Technical Architecture
-
-### Core Components
+## Technical Architecture
 
 ```
 SolarSystem Class
 ├── WebGL Context Management
-├── Shader Program Creation
-├── Geometry Generation
-├── Matrix Mathematics
-├── Camera System
-├── Input Handling
-└── Render Loop
+├── Shader Program Management (Sun/Planet/Ring)
+├── Geometry Generation (Sphere/Ring)
+├── Planetary Data System
+├── Matrix Transformations
+├── Rendering Pipeline
+└── Input Handling
 ```
 
-### Rendering Pipeline
+## Mathematics Implementation
 
-```
-Vertex Shader → Primitive Assembly → Rasterization → Fragment Shader → Frame Buffer
-```
-
-## 📐 Mathematics Implementation
-
-### Custom Matrix4 Class
-
-The project implements a complete 4x4 matrix library from scratch:
-
+### Matrix4 Class Operations
 ```javascript
 class Matrix4 {
-    // Core operations
-    identity()           // Reset to identity matrix
-    perspective()        // Create projection matrix
-    lookAt()            // Create view matrix
-    translate()         // Translation transformation
-    rotateX/Y()         // Rotation transformations
-    scale()             // Scale transformation
-    multiply()          // Matrix multiplication
-    getNormalMatrix()   // Extract 3x3 normal matrix
+    perspective(fovy, aspect, near, far)  // Projection matrix
+    lookAt(eye, center, up)               // View matrix
+    translate(x, y, z)                    // Translation
+    rotateX/Y/Z(angle)                    // Rotations
+    scale(x, y, z)                        // Scaling
+    multiply(matrix)                      // Matrix composition
+    getNormalMatrix()                     // 3x3 normal extraction
 }
+```
+
+### Planetary Data Structure
+```javascript
+planets = [
+    { 
+        name: 'Earth', 
+        distance: 6,           // Orbital radius
+        speed: 1.0,            // Orbital speed multiplier
+        size: 0.3,             // Scale factor
+        color: [0.42, 0.58, 0.84], // RGB values
+        type: 0,               // 0=rocky, 1=gas giant
+        moon: true             // Has moon system
+    }
+]
 ```
 
 ### Transformation Hierarchy
+```javascript
+// Planet transformation
+planetMatrix = Matrix4()
+    .translate(cos(angle) * distance, 0, sin(angle) * distance)  // Orbit
+    .rotateY(time * speed)                                       // Rotation
+    .scale(size, size, size)                                     // Size
 
+// Moon transformation (nested)
+moonMatrix = Matrix4()
+    .translate(planetX, planetY, planetZ)                        // Follow planet
+    .translate(cos(moonAngle) * moonRadius, 0, sin(moonAngle) * moonRadius) // Moon orbit
+    .rotateY(time * moonSpeed)                                   // Moon rotation
+    .scale(moonSize, moonSize, moonSize)                         // Moon size
 ```
-World Space
-├── Sun (static at origin)
-├── Earth
-│   ├── Orbital transformation (around Sun)
-│   ├── Rotational transformation (self-rotation)
-│   └── Moon
-│       ├── Earth-relative orbital transformation
-│       └── Self-rotation
-└── Mars
-    ├── Orbital transformation (around Sun)
-    └── Rotational transformation (self-rotation)
-```
 
-## 🎨 Shader Programming
+## Shader Implementation
 
-### Vertex Shader Architecture
-
+### Vertex Shader
 ```glsl
-// Input attributes from VBOs
-attribute vec3 a_position;    // Vertex positions
-attribute vec3 a_normal;      // Surface normals
-attribute vec2 a_texCoord;    // Texture coordinates
+attribute vec3 a_position;
+attribute vec3 a_normal;
+attribute vec2 a_texCoord;
 
-// Transformation matrices
-uniform mat4 u_modelMatrix;      // Object to world space
-uniform mat4 u_viewMatrix;       // World to camera space
-uniform mat4 u_projectionMatrix; // Camera to clip space
-uniform mat3 u_normalMatrix;     // Normal transformation
+uniform mat4 u_modelMatrix;
+uniform mat4 u_viewMatrix;
+uniform mat4 u_projectionMatrix;
+uniform mat3 u_normalMatrix;
 
-// Output to fragment shader
-varying vec3 v_normal;        // Interpolated normals
-varying vec3 v_position;      // World position
-varying vec2 v_texCoord;      // Texture coordinates
-varying vec3 v_worldPosition; // World space position
+varying vec3 v_normal;
+varying vec3 v_worldPosition;
+varying vec2 v_texCoord;
+
+void main() {
+    vec4 worldPosition = u_modelMatrix * vec4(a_position, 1.0);
+    gl_Position = u_projectionMatrix * u_viewMatrix * worldPosition;
+    
+    v_normal = normalize(u_normalMatrix * a_normal);
+    v_worldPosition = worldPosition.xyz;
+    v_texCoord = a_texCoord;
+}
 ```
 
-### Fragment Shader Techniques
-
-#### Sun Shader (Advanced Effects)
+### Sun Fragment Shader
 ```glsl
-// Time-based pulsing effect
-float pulse = 0.8 + 0.2 * sin(u_time * 3.0);
+uniform float u_time;
+uniform vec3 u_cameraPosition;
 
-// Procedural surface detail
-float surface = sin(v_position.x * 8.0) * sin(v_position.y * 8.0) * sin(v_position.z * 8.0);
+// Multi-frequency pulsing
+float pulse = 0.85 + 0.15 * sin(u_time * 2.5);
+float pulse2 = 0.9 + 0.1 * sin(u_time * 4.0);
 
-// Rim lighting for glow effect
+// Solar surface activity
+float surface1 = sin(v_position.x * 6.0 + u_time) * sin(v_position.y * 6.0 + u_time * 0.7);
+float surface2 = cos(v_position.z * 8.0 + u_time * 1.3) * sin(v_position.x * 4.0);
+float surfaceActivity = (surface1 + surface2) * 0.15;
+
+// Rim lighting
 vec3 viewDir = normalize(u_cameraPosition - v_worldPosition);
 float rim = 1.0 - max(0.0, dot(v_normal, viewDir));
-rim = pow(rim, 2.0);  // Sharper falloff
+rim = pow(rim, 1.5);
+
+vec3 sunColor = vec3(1.0, 0.8, 0.2) * pulse * pulse2;
+sunColor += vec3(0.3, 0.1, 0.0) * surfaceActivity * pulse;
+sunColor += vec3(1.0, 0.7, 0.3) * rim * pulse * 0.8;
 ```
 
-#### Planet Shader (Phong Lighting)
+### Planet Fragment Shader
 ```glsl
-// Phong lighting model components
-vec3 ambient = 0.1 * u_planetColor;                    // Ambient lighting
-float diff = max(dot(v_normal, lightDir), 0.0);        // Diffuse component
-vec3 diffuse = diff * u_planetColor;                   // Diffuse lighting
-float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0); // Specular highlight
-vec3 specular = vec3(0.3) * spec;                      // Specular component
+uniform vec3 u_planetColor;
+uniform float u_planetType; // 0=rocky, 1=gas giant
 
-// Procedural surface patterns
-float pattern = sin(v_texCoord.x * 20.0) * sin(v_texCoord.y * 15.0) * 0.1;
+// Phong lighting
+vec3 lightDir = normalize(u_lightPosition - v_worldPosition);
+vec3 viewDir = normalize(u_cameraPosition - v_worldPosition);
+vec3 reflectDir = reflect(-lightDir, v_normal);
+
+vec3 ambient = 0.15 * u_planetColor;
+float diff = max(dot(v_normal, lightDir), 0.0);
+vec3 diffuse = diff * u_planetColor;
+
+float shininess = u_planetType > 0.5 ? 16.0 : 32.0;
+float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
+vec3 specular = vec3(0.2 + u_planetType * 0.1) * spec;
+
+// Surface patterns
+float pattern;
+if (u_planetType > 0.5) {
+    // Gas giant bands
+    float bands = sin(v_texCoord.y * 15.0 + u_time * 0.1) * 0.1;
+    float storms = sin(v_texCoord.x * 8.0 + u_time * 0.3) * sin(v_texCoord.y * 12.0) * 0.05;
+    pattern = bands + storms;
+} else {
+    // Rocky surface
+    pattern = sin(v_texCoord.x * 25.0) * sin(v_texCoord.y * 20.0) * 0.08;
+}
+
+vec3 color = ambient + diffuse + specular + pattern * u_planetColor;
 ```
 
-## 🔧 WebGL Implementation Details
+### Ring Fragment Shader
+```glsl
+uniform float u_innerRadius;
+uniform float u_outerRadius;
 
-### Buffer Management
+float distance = length(v_position.xz);
 
-The application uses efficient buffer objects for geometry data:
+// Ring boundaries
+if (distance < u_innerRadius || distance > u_outerRadius) {
+    discard;
+}
 
-```javascript
-// Vertex Buffer Object (VBO) creation
-const positionBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+// Ring density patterns
+float ringPattern = sin(distance * 50.0) * 0.3 + 0.7;
+ringPattern *= sin(distance * 120.0 + u_time) * 0.2 + 0.8;
 
-// Element Buffer Object (EBO) for indexed rendering
-const indexBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+// Transparency gradient
+float alpha = smoothstep(u_innerRadius, u_innerRadius + 0.1, distance) * 
+              smoothstep(u_outerRadius, u_outerRadius - 0.1, distance);
+alpha *= ringPattern * 0.6;
+
+gl_FragColor = vec4(u_ringColor, alpha);
 ```
 
-### Sphere Geometry Generation
+## WebGL Implementation
 
-Procedural sphere creation using parametric equations:
-
+### Context Setup
 ```javascript
-// Parametric sphere generation
-for (let i = 0; i <= heightSegments; i++) {
-    const theta = i * Math.PI / heightSegments;        // Latitude angle
-    for (let j = 0; j <= widthSegments; j++) {
-        const phi = j * 2 * Math.PI / widthSegments;   // Longitude angle
+initGL() {
+    const gl = this.gl;
+    gl.enable(gl.DEPTH_TEST);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.clearColor(0.0, 0.0, 0.05, 1.0);
+    
+    this.sunProgram = this.createShaderProgram(vertexShaderSource, sunFragmentShaderSource);
+    this.planetProgram = this.createShaderProgram(vertexShaderSource, planetFragmentShaderSource);
+    this.ringProgram = this.createShaderProgram(vertexShaderSource, ringFragmentShaderSource);
+}
+```
+
+### Buffer Creation
+```javascript
+createBuffers(positions, normals, texCoords, indices) {
+    const gl = this.gl;
+    
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+    
+    const indexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+    
+    return { positionBuffer, normalBuffer, texCoordBuffer, indexBuffer, indexCount: indices.length };
+}
+```
+
+## Geometry Generation
+
+### Sphere Creation
+```javascript
+createSphere(radius, widthSegments, heightSegments) {
+    const positions = [], normals = [], texCoords = [], indices = [];
+    
+    for (let i = 0; i <= heightSegments; i++) {
+        const theta = i * Math.PI / heightSegments;
+        const sinTheta = Math.sin(theta), cosTheta = Math.cos(theta);
         
-        // Spherical to Cartesian coordinates
-        const x = cosPhi * sinTheta;
-        const y = cosTheta;
-        const z = sinPhi * sinTheta;
-        
-        positions.push(radius * x, radius * y, radius * z);
-        normals.push(x, y, z);  // Normalized surface normals
-        texCoords.push(j / widthSegments, i / heightSegments);
+        for (let j = 0; j <= widthSegments; j++) {
+            const phi = j * 2 * Math.PI / widthSegments;
+            const sinPhi = Math.sin(phi), cosPhi = Math.cos(phi);
+            
+            const x = cosPhi * sinTheta;
+            const y = cosTheta;
+            const z = sinPhi * sinTheta;
+            
+            positions.push(radius * x, radius * y, radius * z);
+            normals.push(x, y, z);
+            texCoords.push(j / widthSegments, i / heightSegments);
+        }
     }
+    
+    for (let i = 0; i < heightSegments; i++) {
+        for (let j = 0; j < widthSegments; j++) {
+            const first = i * (widthSegments + 1) + j;
+            const second = first + widthSegments + 1;
+            indices.push(first, second, first + 1, second, second + 1, first + 1);
+        }
+    }
+    
+    return this.createBuffers(positions, normals, texCoords, indices);
 }
 ```
 
-**Topology**: 32 width segments × 16 height segments = 512 vertices per sphere
-**Optimization**: Shared vertices with indexed rendering reduces redundancy
-
-## 🎮 Input System
-
-### Mouse/Touch Event Handling
-
+### Ring Creation
 ```javascript
-// Unified input handling for mouse and touch
-canvas.addEventListener('mousedown', startInteraction);
-canvas.addEventListener('touchstart', startInteraction);
-
-function startInteraction(event) {
-    mouse.isDown = true;
-    const clientX = event.clientX || event.touches[0].clientX;
-    const clientY = event.clientY || event.touches[0].clientY;
-    mouse.lastX = clientX;
-    mouse.lastY = clientY;
+createRing(innerRadius, outerRadius, segments) {
+    const positions = [], normals = [], texCoords = [], indices = [];
+    
+    for (let i = 0; i <= segments; i++) {
+        const angle = i * 2 * Math.PI / segments;
+        const cos = Math.cos(angle), sin = Math.sin(angle);
+        
+        positions.push(innerRadius * cos, 0, innerRadius * sin);
+        positions.push(outerRadius * cos, 0, outerRadius * sin);
+        normals.push(0, 1, 0, 0, 1, 0);
+        texCoords.push(0, i / segments, 1, i / segments);
+    }
+    
+    for (let i = 0; i < segments; i++) {
+        const base = i * 2;
+        indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+    }
+    
+    return this.createBuffers(positions, normals, texCoords, indices);
 }
 ```
 
-### Camera Control System
+## Rendering Pipeline
 
+### Draw Sequence
 ```javascript
-// Spherical camera positioning
+render() {
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    
+    this.updateCamera();
+    
+    // 1. Draw Sun (opaque)
+    this.drawSun();
+    
+    // 2. Draw Planets (opaque)
+    this.planets.forEach((planet, index) => {
+        const angle = this.time * planet.speed;
+        const planetPosition = this.drawPlanet(planet, angle);
+        
+        // 3. Draw Moons (opaque)
+        if (planet.moon) this.drawMoon(planetPosition, angle);
+        if (planet.moons) {
+            for (let i = 0; i < planet.moons; i++) {
+                this.drawMoon(planetPosition, angle, i);
+            }
+        }
+        
+        // 4. Draw Rings (transparent - last)
+        if (planet.rings) this.drawRings(planetPosition);
+    });
+}
+```
+
+### Uniform Management
+```javascript
+setupUniforms(program, modelMatrix) {
+    const projectionMatrix = new Matrix4().perspective(Math.PI/4, this.canvas.width/this.canvas.height, 0.1, 200);
+    const viewMatrix = new Matrix4().lookAt(this.camera.position, [0, 0, 0], [0, 1, 0]);
+    
+    gl.uniformMatrix4fv(gl.getUniformLocation(program, 'u_modelMatrix'), false, modelMatrix.elements);
+    gl.uniformMatrix4fv(gl.getUniformLocation(program, 'u_viewMatrix'), false, viewMatrix.elements);
+    gl.uniformMatrix4fv(gl.getUniformLocation(program, 'u_projectionMatrix'), false, projectionMatrix.elements);
+    gl.uniformMatrix3fv(gl.getUniformLocation(program, 'u_normalMatrix'), false, modelMatrix.getNormalMatrix());
+}
+```
+
+## Input System
+
+### Camera Control
+```javascript
 updateCamera() {
-    const x = distance * cos(rotX) * sin(rotY);
-    const y = distance * sin(rotX);
-    const z = distance * cos(rotX) * cos(rotY);
-    camera.position = [x, y, z];
+    const x = this.camera.distance * Math.cos(this.camera.rotation.x) * Math.sin(this.camera.rotation.y);
+    const y = this.camera.distance * Math.sin(this.camera.rotation.x);
+    const z = this.camera.distance * Math.cos(this.camera.rotation.x) * Math.cos(this.camera.rotation.y);
+    this.camera.position = [x, y, z];
 }
 
-// Constraint system
-camera.rotation.x = Math.max(-PI/2, Math.min(PI/2, camera.rotation.x)); // Pitch limit
-camera.distance = Math.max(5, Math.min(50, camera.distance));           // Zoom bounds
-```
-
-## 🚀 Performance Optimizations
-
-### Rendering Efficiency
-- **Static Geometry**: Sphere buffers created once, reused for all objects
-- **Shader Switching**: Minimal program changes (Sun vs Planet shaders)
-- **Uniform Caching**: Efficient uniform location retrieval
-- **Index Rendering**: `drawElements()` reduces vertex processing
-
-### Memory Management
-- **Float32Array**: Typed arrays for optimal GPU transfer
-- **Buffer Reuse**: Single sphere geometry for all celestial bodies
-- **Matrix Pooling**: Efficient matrix operations without excessive allocation
-
-### Frame Rate Optimization
-```javascript
-// Efficient animation loop
-requestAnimationFrame(() => this.animate());
-
-// FPS monitoring without performance impact
-if (this.fpsCounter % 60 === 0) {
-    const fps = Math.round(1000 / deltaTime);
-    updateFPSDisplay(fps);
+handleMouseMove(event) {
+    if (!this.mouse.isDown) return;
+    
+    const deltaX = event.clientX - this.mouse.lastX;
+    const deltaY = event.clientY - this.mouse.lastY;
+    
+    this.camera.rotation.y += deltaX * 0.01;
+    this.camera.rotation.x += deltaY * 0.01;
+    this.camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, this.camera.rotation.x));
 }
 ```
 
-## 🎯 Orbital Mechanics
+## Performance Optimization
 
-### Realistic Planetary Motion
-
+### Efficient Rendering
 ```javascript
-// Earth orbital parameters
-const earthOrbitRadius = 4.0;     // Distance from Sun
-const earthOrbitSpeed = 0.5;      // Angular velocity
-const earthRotationSpeed = 2.0;   // Axial rotation
+// Shared geometry for all spheres
+this.sphere = this.createSphere(1, 32, 16);  // Created once, scaled per object
 
-// Time-based animation
-const earthAngle = time * earthOrbitSpeed;
-const earthMatrix = new Matrix4()
-    .translate(cos(earthAngle) * earthOrbitRadius, 0, sin(earthAngle) * earthOrbitRadius)
-    .rotateY(time * earthRotationSpeed)
-    .scale(0.5, 0.5, 0.5);
-```
+// Minimal shader switching
+render() {
+    gl.useProgram(this.sunProgram);     // Sun
+    // ... draw sun
+    
+    gl.useProgram(this.planetProgram);  // All planets and moons
+    // ... draw all planets and moons
+    
+    gl.useProgram(this.ringProgram);    // Rings only
+    // ... draw rings
+}
 
-### Nested Orbital System (Earth-Moon)
-
-```javascript
-// Moon orbit relative to Earth's position
-const moonMatrix = new Matrix4()
-    .translate(earthX, earthY, earthZ)                    // Follow Earth
-    .translate(cos(moonAngle) * moonRadius, 0, sin(moonAngle) * moonRadius) // Moon orbit
-    .rotateY(time * moonRotationSpeed)                    // Moon rotation
-    .scale(0.15, 0.15, 0.15);                            // Moon size
-```
-
-## 🌐 Browser Compatibility
-
-### WebGL Support
-- **Chrome/Edge**: Full support (WebGL 1.0/2.0)
-- **Firefox**: Full support (WebGL 1.0/2.0)
-- **Safari**: Full support (WebGL 1.0)
-- **Mobile**: iOS Safari, Chrome Mobile, Firefox Mobile
-
-### Feature Detection
-```javascript
-const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-if (!gl) {
-    alert('WebGL not supported');
-    return;
+// Batch uniform updates
+setupAttributes(geometry) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, geometry.positionBuffer);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, geometry.indexBuffer);
 }
 ```
-
-### Progressive Enhancement
-- Graceful fallback for unsupported browsers
-- Touch event handling for mobile devices
-- Responsive canvas sizing for all screen sizes
-
-
-
-### Controls
-- **Rotate**: Click and drag (or touch and drag on mobile)
-- **Zoom**: Mouse wheel (or pinch gesture on mobile)
-- **Reset**: Refresh the page
-
-## 📁 Code Structure
-
-```
-solar-system.html
-├── HTML Structure
-│   ├── Canvas element
-│   ├── Control information overlay
-│   └── FPS counter display
-├── CSS Styling
-│   ├── Full-screen layout
-│   ├── Cursor states
-│   └── Overlay positioning
-└── JavaScript Implementation
-    ├── Shader source code (GLSL)
-    ├── Matrix4 mathematics library
-    ├── SolarSystem main class
-    ├── Geometry generation
-    ├── Input handling
-    ├── Rendering pipeline
-    └── Animation loop
-```
-
-
-
-
-
----
-
-**Built with**: Pure WebGL, GLSL, JavaScript ES6+, HTML5 Canvas
-**Performance**: 30+ FPS on modern devices
-**Compatibility**: All WebGL-capable browsers
