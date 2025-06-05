@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Solar System WebGL</title>
+    <title>Complete Solar System WebGL</title>
     <style>
         body {
             margin: 0;
@@ -24,10 +24,12 @@
             top: 10px;
             left: 10px;
             color: white;
-            font-size: 14px;
-            background: rgba(0,0,0,0.7);
-            padding: 10px;
-            border-radius: 5px;
+            font-size: 12px;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 200px;
+            line-height: 1.4;
         }
         #fps {
             position: absolute;
@@ -39,20 +41,93 @@
             padding: 5px 10px;
             border-radius: 5px;
         }
+        #planetInfo {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            font-size: 12px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 300px;
+        }
+        .planet-list {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        .planet-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .planet-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 1px solid #fff;
+        }
     </style>
 </head>
 <body>
     <canvas id="canvas"></canvas>
     <div id="controls">
+        <div style="font-weight: bold; margin-bottom: 10px;">🌌 Complete Solar System</div>
         <div>🖱️ Drag to rotate camera</div>
         <div>🖱️ Scroll to zoom</div>
-        <div>☀️ Sun with pulsing glow</div>
-        <div>🌍 Earth with rotating moon</div>
-        <div>🔴 Mars with independent orbit</div>
+        <div>⏱️ Real orbital mechanics</div>
+        <div>🎯 8 planets + moons</div>
     </div>
     <div id="fps">FPS: <span id="fpsValue">0</span></div>
+    
+    <div id="planetInfo">
+        <div style="font-weight: bold; margin-bottom: 8px;">Planetary System</div>
+        <div class="planet-list">
+            <div class="planet-item">
+                <div class="planet-color" style="background: #FFA500;"></div>
+                <span>☀️ Sun</span>
+            </div>
+            <div class="planet-item">
+                <div class="planet-color" style="background: #8C7853;"></div>
+                <span>☿️ Mercury</span>
+            </div>
+            <div class="planet-item">
+                <div class="planet-color" style="background: #FFC649;"></div>
+                <span>♀️ Venus</span>
+            </div>
+            <div class="planet-item">
+                <div class="planet-color" style="background: #6B93D6;"></div>
+                <span>🌍 Earth + Moon</span>
+            </div>
+            <div class="planet-item">
+                <div class="planet-color" style="background: #CD5C5C;"></div>
+                <span>♂️ Mars</span>
+            </div>
+            <div class="planet-item">
+                <div class="planet-color" style="background: #D8CA9D;"></div>
+                <span>♃ Jupiter + Moons</span>
+            </div>
+            <div class="planet-item">
+                <div class="planet-color" style="background: #FAD5A5;"></div>
+                <span>♄ Saturn + Rings</span>
+            </div>
+            <div class="planet-item">
+                <div class="planet-color" style="background: #4FD0E3;"></div>
+                <span>♅ Uranus</span>
+            </div>
+        </div>
+        <div style="margin-top: 5px;">
+            <div class="planet-item">
+                <div class="planet-color" style="background: #4B70DD;"></div>
+                <span>♆ Neptune</span>
+            </div>
+        </div>
+    </div>
 
     <script>
+        // Vertex shader for celestial bodies
         const vertexShaderSource = `
             attribute vec3 a_position;
             attribute vec3 a_normal;
@@ -79,7 +154,7 @@
             }
         `;
 
-       
+        // Fragment shader for the Sun with enhanced pulsing glow
         const sunFragmentShaderSource = `
             precision mediump float;
             
@@ -91,27 +166,35 @@
             varying vec3 v_worldPosition;
             
             void main() {
-                float pulse = 0.8 + 0.2 * sin(u_time * 3.0);
+                float pulse = 0.85 + 0.15 * sin(u_time * 2.5);
+                float pulse2 = 0.9 + 0.1 * sin(u_time * 4.0);
                 
-                // Core sun color
-                vec3 sunColor = vec3(1.0, 0.8, 0.2) * pulse;
+                // Core sun color with multiple pulse frequencies
+                vec3 sunColor = vec3(1.0, 0.8, 0.2) * pulse * pulse2;
                 
-                // Add surface detail with noise-like effect
-                float surface = sin(v_position.x * 8.0) * sin(v_position.y * 8.0) * sin(v_position.z * 8.0);
-                sunColor += vec3(0.2, 0.1, 0.0) * surface * pulse;
+                // Solar surface activity simulation
+                float surface1 = sin(v_position.x * 6.0 + u_time) * sin(v_position.y * 6.0 + u_time * 0.7);
+                float surface2 = cos(v_position.z * 8.0 + u_time * 1.3) * sin(v_position.x * 4.0);
+                float surfaceActivity = (surface1 + surface2) * 0.15;
                 
-                // Glow effect based on viewing angle
+                sunColor += vec3(0.3, 0.1, 0.0) * surfaceActivity * pulse;
+                
+                // Enhanced rim glow effect
                 vec3 viewDir = normalize(u_cameraPosition - v_worldPosition);
                 float rim = 1.0 - max(0.0, dot(v_normal, viewDir));
-                rim = pow(rim, 2.0);
+                rim = pow(rim, 1.5);
                 
-                sunColor += vec3(1.0, 0.6, 0.2) * rim * pulse;
+                sunColor += vec3(1.0, 0.7, 0.3) * rim * pulse * 0.8;
+                
+                // Corona effect
+                float corona = pow(rim, 0.5) * pulse * 0.3;
+                sunColor += vec3(1.0, 0.9, 0.6) * corona;
                 
                 gl_FragColor = vec4(sunColor, 1.0);
             }
         `;
 
-       
+        // Fragment shader for planets with enhanced lighting
         const planetFragmentShaderSource = `
             precision mediump float;
             
@@ -119,6 +202,7 @@
             uniform vec3 u_lightPosition;
             uniform vec3 u_cameraPosition;
             uniform float u_time;
+            uniform float u_planetType; // 0=rocky, 1=gas giant
             
             varying vec3 v_normal;
             varying vec3 v_position;
@@ -130,22 +214,69 @@
                 vec3 viewDir = normalize(u_cameraPosition - v_worldPosition);
                 vec3 reflectDir = reflect(-lightDir, v_normal);
                 
-               
-                vec3 ambient = 0.1 * u_planetColor;
+                // Ambient lighting
+                vec3 ambient = 0.15 * u_planetColor;
                 
-                
+                // Diffuse lighting
                 float diff = max(dot(v_normal, lightDir), 0.0);
                 vec3 diffuse = diff * u_planetColor;
                 
-             
-                float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
-                vec3 specular = vec3(0.3) * spec;
+                // Specular lighting (varies by planet type)
+                float shininess = u_planetType > 0.5 ? 16.0 : 32.0;
+                float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
+                vec3 specular = vec3(0.2 + u_planetType * 0.1) * spec;
                 
-  
-                float pattern = sin(v_texCoord.x * 20.0) * sin(v_texCoord.y * 15.0) * 0.1;
+                // Surface patterns based on planet type
+                float pattern;
+                if (u_planetType > 0.5) {
+                    // Gas giant - bands and storms
+                    float bands = sin(v_texCoord.y * 15.0 + u_time * 0.1) * 0.1;
+                    float storms = sin(v_texCoord.x * 8.0 + u_time * 0.3) * sin(v_texCoord.y * 12.0) * 0.05;
+                    pattern = bands + storms;
+                } else {
+                    // Rocky planet - surface features
+                    pattern = sin(v_texCoord.x * 25.0) * sin(v_texCoord.y * 20.0) * 0.08;
+                    pattern += cos(v_texCoord.x * 35.0 + v_texCoord.y * 30.0) * 0.05;
+                }
                 
-                vec3 color = ambient + diffuse + specular + pattern * u_planetColor;
+                // Terminator darkening (day/night transition)
+                float terminator = smoothstep(-0.1, 0.1, diff);
+                
+                vec3 color = (ambient + diffuse * terminator + specular) + pattern * u_planetColor;
                 gl_FragColor = vec4(color, 1.0);
+            }
+        `;
+
+        // Fragment shader for Saturn's rings
+        const ringFragmentShaderSource = `
+            precision mediump float;
+            
+            uniform vec3 u_ringColor;
+            uniform float u_time;
+            uniform float u_innerRadius;
+            uniform float u_outerRadius;
+            
+            varying vec3 v_position;
+            varying vec2 v_texCoord;
+            
+            void main() {
+                float distance = length(v_position.xz);
+                
+                // Ring boundaries
+                if (distance < u_innerRadius || distance > u_outerRadius) {
+                    discard;
+                }
+                
+                // Ring density variations
+                float ringPattern = sin(distance * 50.0) * 0.3 + 0.7;
+                ringPattern *= sin(distance * 120.0 + u_time) * 0.2 + 0.8;
+                
+                // Transparency based on distance from center
+                float alpha = smoothstep(u_innerRadius, u_innerRadius + 0.1, distance) * 
+                             smoothstep(u_outerRadius, u_outerRadius - 0.1, distance);
+                alpha *= ringPattern * 0.6;
+                
+                gl_FragColor = vec4(u_ringColor, alpha);
             }
         `;
 
@@ -261,6 +392,26 @@
                 return this;
             }
             
+            rotateZ(angle) {
+                const c = Math.cos(angle);
+                const s = Math.sin(angle);
+                const e = this.elements;
+                
+                const m11 = e[0], m21 = e[1], m31 = e[2], m41 = e[3];
+                const m12 = e[4], m22 = e[5], m32 = e[6], m42 = e[7];
+                
+                e[0] = c * m11 + s * m12;
+                e[1] = c * m21 + s * m22;
+                e[2] = c * m31 + s * m32;
+                e[3] = c * m41 + s * m42;
+                
+                e[4] = c * m12 - s * m11;
+                e[5] = c * m22 - s * m21;
+                e[6] = c * m32 - s * m31;
+                e[7] = c * m42 - s * m41;
+                return this;
+            }
+            
             scale(x, y, z) {
                 const e = this.elements;
                 e[0] *= x; e[4] *= y; e[8] *= z;
@@ -339,9 +490,9 @@
                 window.addEventListener('resize', () => this.resizeCanvas());
                 
                 this.camera = {
-                    distance: 15,
+                    distance: 25,
                     rotation: { x: 0, y: 0 },
-                    position: [0, 0, 15]
+                    position: [0, 0, 25]
                 };
                 
                 this.mouse = {
@@ -353,6 +504,18 @@
                 this.time = 0;
                 this.fpsCounter = 0;
                 this.lastTime = performance.now();
+                
+                // Planetary data with realistic characteristics
+                this.planets = [
+                    { name: 'Mercury', distance: 3, speed: 4.15, size: 0.15, color: [0.55, 0.47, 0.33], type: 0 },
+                    { name: 'Venus', distance: 4.5, speed: 1.62, size: 0.25, color: [1.0, 0.78, 0.29], type: 0 },
+                    { name: 'Earth', distance: 6, speed: 1.0, size: 0.3, color: [0.42, 0.58, 0.84], type: 0, moon: true },
+                    { name: 'Mars', distance: 8, speed: 0.53, size: 0.2, color: [0.8, 0.36, 0.36], type: 0 },
+                    { name: 'Jupiter', distance: 12, speed: 0.084, size: 0.8, color: [0.85, 0.79, 0.62], type: 1, moons: 4 },
+                    { name: 'Saturn', distance: 16, speed: 0.034, size: 0.7, color: [0.98, 0.84, 0.65], type: 1, rings: true, moons: 3 },
+                    { name: 'Uranus', distance: 22, speed: 0.012, size: 0.4, color: [0.31, 0.82, 0.89], type: 1 },
+                    { name: 'Neptune', distance: 28, speed: 0.006, size: 0.38, color: [0.29, 0.44, 0.87], type: 1 }
+                ];
                 
                 this.initEventListeners();
                 this.initGL();
@@ -394,11 +557,11 @@
                 
                 this.canvas.addEventListener('wheel', (e) => {
                     e.preventDefault();
-                    this.camera.distance += e.deltaY * 0.01;
-                    this.camera.distance = Math.max(5, Math.min(50, this.camera.distance));
+                    this.camera.distance += e.deltaY * 0.02;
+                    this.camera.distance = Math.max(8, Math.min(80, this.camera.distance));
                 });
                 
-        
+                // Touch events
                 this.canvas.addEventListener('touchstart', (e) => {
                     e.preventDefault();
                     if (e.touches.length === 1) {
@@ -434,10 +597,14 @@
                 const gl = this.gl;
                 
                 gl.enable(gl.DEPTH_TEST);
-                gl.clearColor(0.0, 0.0, 0.1, 1.0);
-            
+                gl.enable(gl.BLEND);
+                gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+                gl.clearColor(0.0, 0.0, 0.05, 1.0);
+                
+                // Create shader programs
                 this.sunProgram = this.createShaderProgram(vertexShaderSource, sunFragmentShaderSource);
                 this.planetProgram = this.createShaderProgram(vertexShaderSource, planetFragmentShaderSource);
+                this.ringProgram = this.createShaderProgram(vertexShaderSource, ringFragmentShaderSource);
             }
             
             createShaderProgram(vertexSource, fragmentSource) {
@@ -476,6 +643,7 @@
             
             createGeometry() {
                 this.sphere = this.createSphere(1, 32, 16);
+                this.ring = this.createRing(1.5, 2.5, 64);
             }
             
             createSphere(radius, widthSegments, heightSegments) {
@@ -514,6 +682,41 @@
                     }
                 }
                 
+                return this.createBuffers(positions, normals, texCoords, indices);
+            }
+            
+            createRing(innerRadius, outerRadius, segments) {
+                const positions = [];
+                const normals = [];
+                const texCoords = [];
+                const indices = [];
+                
+                for (let i = 0; i <= segments; i++) {
+                    const angle = i * 2 * Math.PI / segments;
+                    const cos = Math.cos(angle);
+                    const sin = Math.sin(angle);
+                    
+                    // Inner vertex
+                    positions.push(innerRadius * cos, 0, innerRadius * sin);
+                    normals.push(0, 1, 0);
+                    texCoords.push(0, i / segments);
+                    
+                    // Outer vertex
+                    positions.push(outerRadius * cos, 0, outerRadius * sin);
+                    normals.push(0, 1, 0);
+                    texCoords.push(1, i / segments);
+                }
+                
+                for (let i = 0; i < segments; i++) {
+                    const base = i * 2;
+                    indices.push(base, base + 1, base + 2);
+                    indices.push(base + 1, base + 3, base + 2);
+                }
+                
+                return this.createBuffers(positions, normals, texCoords, indices);
+            }
+            
+            createBuffers(positions, normals, texCoords, indices) {
                 const gl = this.gl;
                 
                 const positionBuffer = gl.createBuffer();
@@ -549,60 +752,148 @@
                 this.camera.position = [x, y, z];
             }
             
-            drawCelestialBody(program, modelMatrix, color, isGlowing = false) {
+            setupUniforms(program, modelMatrix) {
                 const gl = this.gl;
                 
-                gl.useProgram(program);
-                
-                const positionAttribute = gl.getAttribLocation(program, 'a_position');
-                const normalAttribute = gl.getAttribLocation(program, 'a_normal');
-                const texCoordAttribute = gl.getAttribLocation(program, 'a_texCoord');
-                
-                gl.bindBuffer(gl.ARRAY_BUFFER, this.sphere.positionBuffer);
-                gl.enableVertexAttribArray(positionAttribute);
-                gl.vertexAttribPointer(positionAttribute, 3, gl.FLOAT, false, 0, 0);
-                
-                gl.bindBuffer(gl.ARRAY_BUFFER, this.sphere.normalBuffer);
-                gl.enableVertexAttribArray(normalAttribute);
-                gl.vertexAttribPointer(normalAttribute, 3, gl.FLOAT, false, 0, 0);
-                
-                gl.bindBuffer(gl.ARRAY_BUFFER, this.sphere.texCoordBuffer);
-                gl.enableVertexAttribArray(texCoordAttribute);
-                gl.vertexAttribPointer(texCoordAttribute, 2, gl.FLOAT, false, 0, 0);
-                
-                // Set up uniforms
                 const modelMatrixLocation = gl.getUniformLocation(program, 'u_modelMatrix');
                 const viewMatrixLocation = gl.getUniformLocation(program, 'u_viewMatrix');
                 const projectionMatrixLocation = gl.getUniformLocation(program, 'u_projectionMatrix');
                 const normalMatrixLocation = gl.getUniformLocation(program, 'u_normalMatrix');
                 
-                const projectionMatrix = new Matrix4().perspective(Math.PI/4, this.canvas.width/this.canvas.height, 0.1, 100);
+                const projectionMatrix = new Matrix4().perspective(Math.PI/4, this.canvas.width/this.canvas.height, 0.1, 200);
                 const viewMatrix = new Matrix4().lookAt(this.camera.position, [0, 0, 0], [0, 1, 0]);
                 
                 gl.uniformMatrix4fv(modelMatrixLocation, false, modelMatrix.elements);
                 gl.uniformMatrix4fv(viewMatrixLocation, false, viewMatrix.elements);
                 gl.uniformMatrix4fv(projectionMatrixLocation, false, projectionMatrix.elements);
                 gl.uniformMatrix3fv(normalMatrixLocation, false, modelMatrix.getNormalMatrix());
+            }
+            
+            setupAttributes(geometry) {
+                const gl = this.gl;
+                const program = gl.getParameter(gl.CURRENT_PROGRAM);
                 
-                if (isGlowing) {
-                    const timeLocation = gl.getUniformLocation(program, 'u_time');
-                    const cameraPositionLocation = gl.getUniformLocation(program, 'u_cameraPosition');
-                    gl.uniform1f(timeLocation, this.time);
-                    gl.uniform3fv(cameraPositionLocation, this.camera.position);
-                } else {
-                    const planetColorLocation = gl.getUniformLocation(program, 'u_planetColor');
-                    const lightPositionLocation = gl.getUniformLocation(program, 'u_lightPosition');
-                    const cameraPositionLocation = gl.getUniformLocation(program, 'u_cameraPosition');
-                    const timeLocation = gl.getUniformLocation(program, 'u_time');
-                    
-                    gl.uniform3fv(planetColorLocation, color);
-                    gl.uniform3fv(lightPositionLocation, [0, 0, 0]);
-                    gl.uniform3fv(cameraPositionLocation, this.camera.position);
-                    gl.uniform1f(timeLocation, this.time);
-                }
+                const positionAttribute = gl.getAttribLocation(program, 'a_position');
+                const normalAttribute = gl.getAttribLocation(program, 'a_normal');
+                const texCoordAttribute = gl.getAttribLocation(program, 'a_texCoord');
+                
+                gl.bindBuffer(gl.ARRAY_BUFFER, geometry.positionBuffer);
+                gl.enableVertexAttribArray(positionAttribute);
+                gl.vertexAttribPointer(positionAttribute, 3, gl.FLOAT, false, 0, 0);
+                
+                gl.bindBuffer(gl.ARRAY_BUFFER, geometry.normalBuffer);
+                gl.enableVertexAttribArray(normalAttribute);
+                gl.vertexAttribPointer(normalAttribute, 3, gl.FLOAT, false, 0, 0);
+                
+                gl.bindBuffer(gl.ARRAY_BUFFER, geometry.texCoordBuffer);
+                gl.enableVertexAttribArray(texCoordAttribute);
+                gl.vertexAttribPointer(texCoordAttribute, 2, gl.FLOAT, false, 0, 0);
+            }
+            
+            drawSun() {
+                const gl = this.gl;
+                gl.useProgram(this.sunProgram);
+                
+                const sunMatrix = new Matrix4().scale(1.2, 1.2, 1.2);
+                this.setupUniforms(this.sunProgram, sunMatrix);
+                this.setupAttributes(this.sphere);
+                
+                const timeLocation = gl.getUniformLocation(this.sunProgram, 'u_time');
+                const cameraPositionLocation = gl.getUniformLocation(this.sunProgram, 'u_cameraPosition');
+                gl.uniform1f(timeLocation, this.time);
+                gl.uniform3fv(cameraPositionLocation, this.camera.position);
                 
                 gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.sphere.indexBuffer);
                 gl.drawElements(gl.TRIANGLES, this.sphere.indexCount, gl.UNSIGNED_SHORT, 0);
+            }
+            
+            drawPlanet(planet, angle) {
+                const gl = this.gl;
+                gl.useProgram(this.planetProgram);
+                
+                const planetMatrix = new Matrix4()
+                    .translate(Math.cos(angle) * planet.distance, 0, Math.sin(angle) * planet.distance)
+                    .rotateY(this.time * (planet.speed + 1))
+                    .scale(planet.size, planet.size, planet.size);
+                
+                this.setupUniforms(this.planetProgram, planetMatrix);
+                this.setupAttributes(this.sphere);
+                
+                const planetColorLocation = gl.getUniformLocation(this.planetProgram, 'u_planetColor');
+                const lightPositionLocation = gl.getUniformLocation(this.planetProgram, 'u_lightPosition');
+                const cameraPositionLocation = gl.getUniformLocation(this.planetProgram, 'u_cameraPosition');
+                const timeLocation = gl.getUniformLocation(this.planetProgram, 'u_time');
+                const planetTypeLocation = gl.getUniformLocation(this.planetProgram, 'u_planetType');
+                
+                gl.uniform3fv(planetColorLocation, planet.color);
+                gl.uniform3fv(lightPositionLocation, [0, 0, 0]);
+                gl.uniform3fv(cameraPositionLocation, this.camera.position);
+                gl.uniform1f(timeLocation, this.time);
+                gl.uniform1f(planetTypeLocation, planet.type);
+                
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.sphere.indexBuffer);
+                gl.drawElements(gl.TRIANGLES, this.sphere.indexCount, gl.UNSIGNED_SHORT, 0);
+                
+                return [Math.cos(angle) * planet.distance, 0, Math.sin(angle) * planet.distance];
+            }
+            
+            drawMoon(planetPosition, planetAngle, moonIndex = 0) {
+                const gl = this.gl;
+                
+                const moonOrbitRadius = 0.8 + moonIndex * 0.3;
+                const moonOrbitSpeed = 4 + moonIndex * 1.5;
+                const moonAngle = this.time * moonOrbitSpeed + moonIndex * Math.PI / 2;
+                
+                const moonMatrix = new Matrix4()
+                    .translate(planetPosition[0], planetPosition[1], planetPosition[2])
+                    .translate(Math.cos(moonAngle) * moonOrbitRadius, 0, Math.sin(moonAngle) * moonOrbitRadius)
+                    .rotateY(this.time * (2 + moonIndex))
+                    .scale(0.08 + moonIndex * 0.02, 0.08 + moonIndex * 0.02, 0.08 + moonIndex * 0.02);
+                
+                this.setupUniforms(this.planetProgram, moonMatrix);
+                
+                const moonColor = moonIndex === 0 ? [0.8, 0.8, 0.7] : [0.7, 0.7, 0.65];
+                
+                const planetColorLocation = gl.getUniformLocation(this.planetProgram, 'u_planetColor');
+                const lightPositionLocation = gl.getUniformLocation(this.planetProgram, 'u_lightPosition');
+                const cameraPositionLocation = gl.getUniformLocation(this.planetProgram, 'u_cameraPosition');
+                const timeLocation = gl.getUniformLocation(this.planetProgram, 'u_time');
+                const planetTypeLocation = gl.getUniformLocation(this.planetProgram, 'u_planetType');
+                
+                gl.uniform3fv(planetColorLocation, moonColor);
+                gl.uniform3fv(lightPositionLocation, [0, 0, 0]);
+                gl.uniform3fv(cameraPositionLocation, this.camera.position);
+                gl.uniform1f(timeLocation, this.time);
+                gl.uniform1f(planetTypeLocation, 0);
+                
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.sphere.indexBuffer);
+                gl.drawElements(gl.TRIANGLES, this.sphere.indexCount, gl.UNSIGNED_SHORT, 0);
+            }
+            
+            drawRings(planetPosition) {
+                const gl = this.gl;
+                gl.useProgram(this.ringProgram);
+                
+                const ringMatrix = new Matrix4()
+                    .translate(planetPosition[0], planetPosition[1], planetPosition[2])
+                    .rotateX(Math.PI / 6)
+                    .rotateY(this.time * 0.1);
+                
+                this.setupUniforms(this.ringProgram, ringMatrix);
+                this.setupAttributes(this.ring);
+                
+                const ringColorLocation = gl.getUniformLocation(this.ringProgram, 'u_ringColor');
+                const timeLocation = gl.getUniformLocation(this.ringProgram, 'u_time');
+                const innerRadiusLocation = gl.getUniformLocation(this.ringProgram, 'u_innerRadius');
+                const outerRadiusLocation = gl.getUniformLocation(this.ringProgram, 'u_outerRadius');
+                
+                gl.uniform3fv(ringColorLocation, [0.9, 0.8, 0.6]);
+                gl.uniform1f(timeLocation, this.time);
+                gl.uniform1f(innerRadiusLocation, 1.5);
+                gl.uniform1f(outerRadiusLocation, 2.5);
+                
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ring.indexBuffer);
+                gl.drawElements(gl.TRIANGLES, this.ring.indexCount, gl.UNSIGNED_SHORT, 0);
             }
             
             render() {
@@ -612,46 +903,28 @@
                 
                 this.updateCamera();
                 
-                const sunMatrix = new Matrix4().scale(1.5, 1.5, 1.5);
-                this.drawCelestialBody(this.sunProgram, sunMatrix, null, true);
+                // Draw Sun
+                this.drawSun();
                 
-                const earthOrbitRadius = 4;
-                const earthOrbitSpeed = 0.5;
-                const earthRotationSpeed = 2;
-                const earthAngle = this.time * earthOrbitSpeed;
-                
-                const earthMatrix = new Matrix4()
-                    .translate(Math.cos(earthAngle) * earthOrbitRadius, 0, Math.sin(earthAngle) * earthOrbitRadius)
-                    .rotateY(this.time * earthRotationSpeed)
-                    .scale(0.5, 0.5, 0.5);
-                
-                this.drawCelestialBody(this.planetProgram, earthMatrix, [0.2, 0.5, 0.8]);
-                
-      
-                const moonOrbitRadius = 1.2;
-                const moonOrbitSpeed = 3;
-                const moonAngle = this.time * moonOrbitSpeed;
-                
-                const moonMatrix = new Matrix4()
-                    .translate(Math.cos(earthAngle) * earthOrbitRadius, 0, Math.sin(earthAngle) * earthOrbitRadius)
-                    .translate(Math.cos(moonAngle) * moonOrbitRadius, 0, Math.sin(moonAngle) * moonOrbitRadius)
-                    .rotateY(this.time * 1.5)
-                    .scale(0.15, 0.15, 0.15);
-                
-                this.drawCelestialBody(this.planetProgram, moonMatrix, [0.8, 0.8, 0.7]);
-                
-          
-                const marsOrbitRadius = 6.5;
-                const marsOrbitSpeed = 0.3;
-                const marsRotationSpeed = 1.8;
-                const marsAngle = this.time * marsOrbitSpeed;
-                
-                const marsMatrix = new Matrix4()
-                    .translate(Math.cos(marsAngle) * marsOrbitRadius, 0, Math.sin(marsAngle) * marsOrbitRadius)
-                    .rotateY(this.time * marsRotationSpeed)
-                    .scale(0.35, 0.35, 0.35);
-                
-                this.drawCelestialBody(this.planetProgram, marsMatrix, [0.8, 0.3, 0.2]);
+                // Draw all planets
+                this.planets.forEach((planet, index) => {
+                    const angle = this.time * planet.speed;
+                    const planetPosition = this.drawPlanet(planet, angle);
+                    
+                    // Draw moons
+                    if (planet.moon) {
+                        this.drawMoon(planetPosition, angle);
+                    } else if (planet.moons) {
+                        for (let i = 0; i < planet.moons; i++) {
+                            this.drawMoon(planetPosition, angle, i);
+                        }
+                    }
+                    
+                    // Draw rings for Saturn
+                    if (planet.rings) {
+                        this.drawRings(planetPosition);
+                    }
+                });
             }
             
             animate() {
@@ -659,7 +932,7 @@
                 const deltaTime = currentTime - this.lastTime;
                 this.lastTime = currentTime;
                 
-                this.time += deltaTime * 0.001;
+                this.time += deltaTime * 0.0008; // Slowed down for better viewing
                 
                 // FPS counter
                 this.fpsCounter++;
@@ -673,7 +946,7 @@
             }
         }
         
-    
+        // Start the application
         window.addEventListener('load', () => {
             new SolarSystem();
         });
