@@ -4,7 +4,7 @@
 ## Question 1
 # LRU Cache Implementation
 
-* Data Structure Design: I use a custom Node class with key, value, and bidirectional pointers, along with dummy nodes (left and right) that act as permanent head and tail markers, simplifying insertion and deletion operations by eliminating edge case handling. 
+* Data Structure Design: I used a custom Node class with key, value, and bidirectional pointers, along with dummy nodes (left and right) that act as permanent head and tail markers, simplifying insertion and deletion operations by eliminating edge case handling. 
 * Hash Map Integration: The unordered_map<int,Node*> provides O(1) key-to-node mapping, while the doubly linked list maintains the usage order with most recently used items near the tail (right) and least recently used near the head (left).
 * Movement Strategy: remove_node() and insert_node() helper functions efficiently unlink nodes from their current position and insert them right before the tail sentinel, effectively marking them as most recently used without traversing the entire list.
 * Get Operation: When accessing a key, you check the hash map for existence, and if found, move the corresponding node to the tail position to mark it as recently used, then return its value.
