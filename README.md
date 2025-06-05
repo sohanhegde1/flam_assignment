@@ -2,10 +2,11 @@
 ## SET1
 ## Question 1
 
-* Data Structure Design: You use a custom Node class with key, value, and bidirectional pointers, along with dummy nodes (left and right) that act as permanent head and tail markers, simplifying insertion and deletion operations by eliminating edge case handling. 
+* Data Structure Design: I use a custom Node class with key, value, and bidirectional pointers, along with dummy nodes (left and right) that act as permanent head and tail markers, simplifying insertion and deletion operations by eliminating edge case handling. 
 * Hash Map Integration: The unordered_map<int,Node*> provides O(1) key-to-node mapping, while the doubly linked list maintains the usage order with most recently used items near the tail (right) and least recently used near the head (left).
-* Movement Strategy: Your remove_node() and insert_node() helper functions efficiently unlink nodes from their current position and insert them right before the tail sentinel, effectively marking them as most recently used without traversing the entire list.
-* Get Operation: When accessing a key, you check the hash map for existence, and if found, move the corresponding node to the tail position to mark it as recently used, then return its value. Put Operation: For insertion/update, you handle existing keys by removing the old node, create a new node with the given key-value pair, insert it at the tail, and maintain capacity by evicting the leftmost node (least recently used) when the cache exceeds its size limit.
+* Movement Strategy: remove_node() and insert_node() helper functions efficiently unlink nodes from their current position and insert them right before the tail sentinel, effectively marking them as most recently used without traversing the entire list.
+* Get Operation: When accessing a key, you check the hash map for existence, and if found, move the corresponding node to the tail position to mark it as recently used, then return its value.
+* Put Operation: For insertion/update, you handle existing keys by removing the old node, create a new node with the given key-value pair, insert it at the tail, and maintain capacity by evicting the leftmost node (least recently used) when the cache exceeds its size limit.
 * Memory Management: You properly delete evicted nodes to prevent memory leaks, though there's a potential bug in your put method where you call delete mp[key] after mp.erase(key), which should be fixed by storing the node pointer before erasing from the map.
 * Time Complexity Achievement: All operations run in O(1) time because hash map lookups, doubly linked list insertions/deletions, and node movements are constant time operations, making this an efficient LRU cache implementation.
 ## Question 2
