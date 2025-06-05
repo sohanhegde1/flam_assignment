@@ -1,5 +1,5 @@
-# flam_assignment
-## SET1
+# Flam_assignment
+## SET 1
 ## Question 1
 
 * Data Structure Design: I use a custom Node class with key, value, and bidirectional pointers, along with dummy nodes (left and right) that act as permanent head and tail markers, simplifying insertion and deletion operations by eliminating edge case handling. 
