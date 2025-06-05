@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar System WebGL</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+            cursor: grab;
+        }
+        canvas:active {
+            cursor: grabbing;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 14px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #fps {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            font-size: 14px;
+            background: rgba(0,0,0,0.7);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="controls">
+        <div>🖱️ Drag to rotate camera</div>
+        <div>🖱️ Scroll to zoom</div>
+        <div>☀️ Sun with pulsing glow</div>
+        <div>🌍 Earth with rotating moon</div>
+        <div>🔴 Mars with independent orbit</div>
+    </div>
+    <div id="fps">FPS: <span id="fpsValue">0</span></div>
+
+    <script>
+        const vertexShaderSource = `
+            attribute vec3 a_position;
+            attribute vec3 a_normal;
+            attribute vec2 a_texCoord;
+            
+            uniform mat4 u_modelMatrix;
+            uniform mat4 u_viewMatrix;
+            uniform mat4 u_projectionMatrix;
+            uniform mat3 u_normalMatrix;
+            
+            varying vec3 v_normal;
+            varying vec3 v_position;
+            varying vec2 v_texCoord;
+            varying vec3 v_worldPosition;
+            
+            void main() {
+                vec4 worldPosition = u_modelMatrix * vec4(a_position, 1.0);
+                gl_Position = u_projectionMatrix * u_viewMatrix * worldPosition;
+                
+                v_normal = normalize(u_normalMatrix * a_normal);
+                v_position = a_position;
+                v_texCoord = a_texCoord;
+                v_worldPosition = worldPosition.xyz;
+            }
+        `;
+
+       
+        const sunFragmentShaderSource = `
+            precision mediump float;
+            
+            uniform float u_time;
+            uniform vec3 u_cameraPosition;
+            
+            varying vec3 v_normal;
+            varying vec3 v_position;
+            varying vec3 v_worldPosition;
+            
+            void main() {
+                float pulse = 0.8 + 0.2 * sin(u_time * 3.0);
+                
+                // Core sun color
+                vec3 sunColor = vec3(1.0, 0.8, 0.2) * pulse;
+                
+                // Add surface detail with noise-like effect
+                float surface = sin(v_position.x * 8.0) * sin(v_position.y * 8.0) * sin(v_position.z * 8.0);
+                sunColor += vec3(0.2, 0.1, 0.0) * surface * pulse;
+                
+                // Glow effect based on viewing angle
+                vec3 viewDir = normalize(u_cameraPosition - v_worldPosition);
+                float rim = 1.0 - max(0.0, dot(v_normal, viewDir));
+                rim = pow(rim, 2.0);
+                
+                sunColor += vec3(1.0, 0.6, 0.2) * rim * pulse;
+                
+                gl_FragColor = vec4(sunColor, 1.0);
+            }
+        `;
+
+       
+        const planetFragmentShaderSource = `
+            precision mediump float;
+            
+            uniform vec3 u_planetColor;
+            uniform vec3 u_lightPosition;
+            uniform vec3 u_cameraPosition;
+            uniform float u_time;
+            
+            varying vec3 v_normal;
+            varying vec3 v_position;
+            varying vec2 v_texCoord;
+            varying vec3 v_worldPosition;
+            
+            void main() {
+                vec3 lightDir = normalize(u_lightPosition - v_worldPosition);
+                vec3 viewDir = normalize(u_cameraPosition - v_worldPosition);
+                vec3 reflectDir = reflect(-lightDir, v_normal);
+                
+               
+                vec3 ambient = 0.1 * u_planetColor;
+                
+                
+                float diff = max(dot(v_normal, lightDir), 0.0);
+                vec3 diffuse = diff * u_planetColor;
+                
+             
+                float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
+                vec3 specular = vec3(0.3) * spec;
+                
+  
+                float pattern = sin(v_texCoord.x * 20.0) * sin(v_texCoord.y * 15.0) * 0.1;
+                
+                vec3 color = ambient + diffuse + specular + pattern * u_planetColor;
+                gl_FragColor = vec4(color, 1.0);
+            }
+        `;
+
+        class Matrix4 {
+            constructor() {
+                this.elements = new Float32Array(16);
+                this.identity();
+            }
+            
+            identity() {
+                const e = this.elements;
+                e[0] = 1; e[4] = 0; e[8] = 0;  e[12] = 0;
+                e[1] = 0; e[5] = 1; e[9] = 0;  e[13] = 0;
+                e[2] = 0; e[6] = 0; e[10] = 1; e[14] = 0;
+                e[3] = 0; e[7] = 0; e[11] = 0; e[15] = 1;
+                return this;
+            }
+            
+            perspective(fovy, aspect, near, far) {
+                const e = this.elements;
+                const f = 1.0 / Math.tan(fovy / 2);
+                const rangeInv = 1 / (near - far);
+                
+                e[0] = f / aspect; e[4] = 0; e[8] = 0; e[12] = 0;
+                e[1] = 0; e[5] = f; e[9] = 0; e[13] = 0;
+                e[2] = 0; e[6] = 0; e[10] = (near + far) * rangeInv; e[14] = near * far * rangeInv * 2;
+                e[3] = 0; e[7] = 0; e[11] = -1; e[15] = 0;
+                return this;
+            }
+            
+            lookAt(eye, center, up) {
+                const e = this.elements;
+                const fx = center[0] - eye[0];
+                const fy = center[1] - eye[1];
+                const fz = center[2] - eye[2];
+                const rlf = 1 / Math.sqrt(fx*fx + fy*fy + fz*fz);
+                const fx_norm = fx * rlf;
+                const fy_norm = fy * rlf;
+                const fz_norm = fz * rlf;
+                
+                const sx = fy_norm * up[2] - fz_norm * up[1];
+                const sy = fz_norm * up[0] - fx_norm * up[2];
+                const sz = fx_norm * up[1] - fy_norm * up[0];
+                const rls = 1 / Math.sqrt(sx*sx + sy*sy + sz*sz);
+                const sx_norm = sx * rls;
+                const sy_norm = sy * rls;
+                const sz_norm = sz * rls;
+                
+                const ux = sy_norm * fz_norm - sz_norm * fy_norm;
+                const uy = sz_norm * fx_norm - sx_norm * fz_norm;
+                const uz = sx_norm * fy_norm - sy_norm * fx_norm;
+                
+                e[0] = sx_norm; e[4] = ux; e[8] = -fx_norm; e[12] = 0;
+                e[1] = sy_norm; e[5] = uy; e[9] = -fy_norm; e[13] = 0;
+                e[2] = sz_norm; e[6] = uz; e[10] = -fz_norm; e[14] = 0;
+                e[3] = 0; e[7] = 0; e[11] = 0; e[15] = 1;
+                
+                const te = new Matrix4();
+                te.elements[12] = -(sx_norm * eye[0] + sy_norm * eye[1] + sz_norm * eye[2]);
+                te.elements[13] = -(ux * eye[0] + uy * eye[1] + uz * eye[2]);
+                te.elements[14] = -(-fx_norm * eye[0] + -fy_norm * eye[1] + -fz_norm * eye[2]);
+                
+                this.multiply(te);
+                return this;
+            }
+            
+            translate(x, y, z) {
+                const e = this.elements;
+                e[12] = e[0] * x + e[4] * y + e[8] * z + e[12];
+                e[13] = e[1] * x + e[5] * y + e[9] * z + e[13];
+                e[14] = e[2] * x + e[6] * y + e[10] * z + e[14];
+                e[15] = e[3] * x + e[7] * y + e[11] * z + e[15];
+                return this;
+            }
+            
+            rotateY(angle) {
+                const c = Math.cos(angle);
+                const s = Math.sin(angle);
+                const e = this.elements;
+                
+                const m11 = e[0], m21 = e[1], m31 = e[2], m41 = e[3];
+                const m13 = e[8], m23 = e[9], m33 = e[10], m43 = e[11];
+                
+                e[0] = c * m11 + s * m13;
+                e[1] = c * m21 + s * m23;
+                e[2] = c * m31 + s * m33;
+                e[3] = c * m41 + s * m43;
+                
+                e[8] = c * m13 - s * m11;
+                e[9] = c * m23 - s * m21;
+                e[10] = c * m33 - s * m31;
+                e[11] = c * m43 - s * m41;
+                return this;
+            }
+            
+            rotateX(angle) {
+                const c = Math.cos(angle);
+                const s = Math.sin(angle);
+                const e = this.elements;
+                
+                const m12 = e[4], m22 = e[5], m32 = e[6], m42 = e[7];
+                const m13 = e[8], m23 = e[9], m33 = e[10], m43 = e[11];
+                
+                e[4] = c * m12 - s * m13;
+                e[5] = c * m22 - s * m23;
+                e[6] = c * m32 - s * m33;
+                e[7] = c * m42 - s * m43;
+                
+                e[8] = s * m12 + c * m13;
+                e[9] = s * m22 + c * m23;
+                e[10] = s * m32 + c * m33;
+                e[11] = s * m42 + c * m43;
+                return this;
+            }
+            
+            scale(x, y, z) {
+                const e = this.elements;
+                e[0] *= x; e[4] *= y; e[8] *= z;
+                e[1] *= x; e[5] *= y; e[9] *= z;
+                e[2] *= x; e[6] *= y; e[10] *= z;
+                e[3] *= x; e[7] *= y; e[11] *= z;
+                return this;
+            }
+            
+            multiply(m) {
+                const ae = this.elements;
+                const be = m.elements;
+                const te = new Float32Array(16);
+                
+                const a11 = ae[0], a12 = ae[4], a13 = ae[8], a14 = ae[12];
+                const a21 = ae[1], a22 = ae[5], a23 = ae[9], a24 = ae[13];
+                const a31 = ae[2], a32 = ae[6], a33 = ae[10], a34 = ae[14];
+                const a41 = ae[3], a42 = ae[7], a43 = ae[11], a44 = ae[15];
+                
+                const b11 = be[0], b12 = be[4], b13 = be[8], b14 = be[12];
+                const b21 = be[1], b22 = be[5], b23 = be[9], b24 = be[13];
+                const b31 = be[2], b32 = be[6], b33 = be[10], b34 = be[14];
+                const b41 = be[3], b42 = be[7], b43 = be[11], b44 = be[15];
+                
+                te[0] = a11 * b11 + a12 * b21 + a13 * b31 + a14 * b41;
+                te[4] = a11 * b12 + a12 * b22 + a13 * b32 + a14 * b42;
+                te[8] = a11 * b13 + a12 * b23 + a13 * b33 + a14 * b43;
+                te[12] = a11 * b14 + a12 * b24 + a13 * b34 + a14 * b44;
+                
+                te[1] = a21 * b11 + a22 * b21 + a23 * b31 + a24 * b41;
+                te[5] = a21 * b12 + a22 * b22 + a23 * b32 + a24 * b42;
+                te[9] = a21 * b13 + a22 * b23 + a23 * b33 + a24 * b43;
+                te[13] = a21 * b14 + a22 * b24 + a23 * b34 + a24 * b44;
+                
+                te[2] = a31 * b11 + a32 * b21 + a33 * b31 + a34 * b41;
+                te[6] = a31 * b12 + a32 * b22 + a33 * b32 + a34 * b42;
+                te[10] = a31 * b13 + a32 * b23 + a33 * b33 + a34 * b43;
+                te[14] = a31 * b14 + a32 * b24 + a33 * b34 + a34 * b44;
+                
+                te[3] = a41 * b11 + a42 * b21 + a43 * b31 + a44 * b41;
+                te[7] = a41 * b12 + a42 * b22 + a43 * b32 + a44 * b42;
+                te[11] = a41 * b13 + a42 * b23 + a43 * b33 + a44 * b43;
+                te[15] = a41 * b14 + a42 * b24 + a43 * b34 + a44 * b44;
+                
+                this.elements = te;
+                return this;
+            }
+            
+            clone() {
+                const m = new Matrix4();
+                m.elements.set(this.elements);
+                return m;
+            }
+            
+            getNormalMatrix() {
+                const e = this.elements;
+                return new Float32Array([
+                    e[0], e[1], e[2],
+                    e[4], e[5], e[6],
+                    e[8], e[9], e[10]
+                ]);
+            }
+        }
+
+        class SolarSystem {
+            constructor() {
+                this.canvas = document.getElementById('canvas');
+                this.gl = this.canvas.getContext('webgl');
+                
+                if (!this.gl) {
+                    alert('WebGL not supported');
+                    return;
+                }
+                
+                this.resizeCanvas();
+                window.addEventListener('resize', () => this.resizeCanvas());
+                
+                this.camera = {
+                    distance: 15,
+                    rotation: { x: 0, y: 0 },
+                    position: [0, 0, 15]
+                };
+                
+                this.mouse = {
+                    isDown: false,
+                    lastX: 0,
+                    lastY: 0
+                };
+                
+                this.time = 0;
+                this.fpsCounter = 0;
+                this.lastTime = performance.now();
+                
+                this.initEventListeners();
+                this.initGL();
+                this.createGeometry();
+                this.animate();
+            }
+            
+            resizeCanvas() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+                this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+            }
+            
+            initEventListeners() {
+                this.canvas.addEventListener('mousedown', (e) => {
+                    this.mouse.isDown = true;
+                    this.mouse.lastX = e.clientX;
+                    this.mouse.lastY = e.clientY;
+                });
+                
+                this.canvas.addEventListener('mousemove', (e) => {
+                    if (!this.mouse.isDown) return;
+                    
+                    const deltaX = e.clientX - this.mouse.lastX;
+                    const deltaY = e.clientY - this.mouse.lastY;
+                    
+                    this.camera.rotation.y += deltaX * 0.01;
+                    this.camera.rotation.x += deltaY * 0.01;
+                    
+                    this.camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, this.camera.rotation.x));
+                    
+                    this.mouse.lastX = e.clientX;
+                    this.mouse.lastY = e.clientY;
+                });
+                
+                this.canvas.addEventListener('mouseup', () => {
+                    this.mouse.isDown = false;
+                });
+                
+                this.canvas.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    this.camera.distance += e.deltaY * 0.01;
+                    this.camera.distance = Math.max(5, Math.min(50, this.camera.distance));
+                });
+                
+        
+                this.canvas.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    if (e.touches.length === 1) {
+                        this.mouse.isDown = true;
+                        this.mouse.lastX = e.touches[0].clientX;
+                        this.mouse.lastY = e.touches[0].clientY;
+                    }
+                });
+                
+                this.canvas.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    if (!this.mouse.isDown || e.touches.length !== 1) return;
+                    
+                    const deltaX = e.touches[0].clientX - this.mouse.lastX;
+                    const deltaY = e.touches[0].clientY - this.mouse.lastY;
+                    
+                    this.camera.rotation.y += deltaX * 0.01;
+                    this.camera.rotation.x += deltaY * 0.01;
+                    
+                    this.camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, this.camera.rotation.x));
+                    
+                    this.mouse.lastX = e.touches[0].clientX;
+                    this.mouse.lastY = e.touches[0].clientY;
+                });
+                
+                this.canvas.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    this.mouse.isDown = false;
+                });
+            }
+            
+            initGL() {
+                const gl = this.gl;
+                
+                gl.enable(gl.DEPTH_TEST);
+                gl.clearColor(0.0, 0.0, 0.1, 1.0);
+            
+                this.sunProgram = this.createShaderProgram(vertexShaderSource, sunFragmentShaderSource);
+                this.planetProgram = this.createShaderProgram(vertexShaderSource, planetFragmentShaderSource);
+            }
+            
+            createShaderProgram(vertexSource, fragmentSource) {
+                const gl = this.gl;
+                
+                const vertexShader = this.createShader(gl.VERTEX_SHADER, vertexSource);
+                const fragmentShader = this.createShader(gl.FRAGMENT_SHADER, fragmentSource);
+                
+                const program = gl.createProgram();
+                gl.attachShader(program, vertexShader);
+                gl.attachShader(program, fragmentShader);
+                gl.linkProgram(program);
+                
+                if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                    console.error('Program linking error:', gl.getProgramInfoLog(program));
+                    return null;
+                }
+                
+                return program;
+            }
+            
+            createShader(type, source) {
+                const gl = this.gl;
+                const shader = gl.createShader(type);
+                gl.shaderSource(shader, source);
+                gl.compileShader(shader);
+                
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    console.error('Shader compilation error:', gl.getShaderInfoLog(shader));
+                    gl.deleteShader(shader);
+                    return null;
+                }
+                
+                return shader;
+            }
+            
+            createGeometry() {
+                this.sphere = this.createSphere(1, 32, 16);
+            }
+            
+            createSphere(radius, widthSegments, heightSegments) {
+                const positions = [];
+                const normals = [];
+                const texCoords = [];
+                const indices = [];
+                
+                for (let i = 0; i <= heightSegments; i++) {
+                    const theta = i * Math.PI / heightSegments;
+                    const sinTheta = Math.sin(theta);
+                    const cosTheta = Math.cos(theta);
+                    
+                    for (let j = 0; j <= widthSegments; j++) {
+                        const phi = j * 2 * Math.PI / widthSegments;
+                        const sinPhi = Math.sin(phi);
+                        const cosPhi = Math.cos(phi);
+                        
+                        const x = cosPhi * sinTheta;
+                        const y = cosTheta;
+                        const z = sinPhi * sinTheta;
+                        
+                        positions.push(radius * x, radius * y, radius * z);
+                        normals.push(x, y, z);
+                        texCoords.push(j / widthSegments, i / heightSegments);
+                    }
+                }
+                
+                for (let i = 0; i < heightSegments; i++) {
+                    for (let j = 0; j < widthSegments; j++) {
+                        const first = i * (widthSegments + 1) + j;
+                        const second = first + widthSegments + 1;
+                        
+                        indices.push(first, second, first + 1);
+                        indices.push(second, second + 1, first + 1);
+                    }
+                }
+                
+                const gl = this.gl;
+                
+                const positionBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+                
+                const normalBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
+                
+                const texCoordBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texCoords), gl.STATIC_DRAW);
+                
+                const indexBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+                gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+                
+                return {
+                    positionBuffer,
+                    normalBuffer,
+                    texCoordBuffer,
+                    indexBuffer,
+                    indexCount: indices.length
+                };
+            }
+            
+            updateCamera() {
+                const x = this.camera.distance * Math.cos(this.camera.rotation.x) * Math.sin(this.camera.rotation.y);
+                const y = this.camera.distance * Math.sin(this.camera.rotation.x);
+                const z = this.camera.distance * Math.cos(this.camera.rotation.x) * Math.cos(this.camera.rotation.y);
+                
+                this.camera.position = [x, y, z];
+            }
+            
+            drawCelestialBody(program, modelMatrix, color, isGlowing = false) {
+                const gl = this.gl;
+                
+                gl.useProgram(program);
+                
+                const positionAttribute = gl.getAttribLocation(program, 'a_position');
+                const normalAttribute = gl.getAttribLocation(program, 'a_normal');
+                const texCoordAttribute = gl.getAttribLocation(program, 'a_texCoord');
+                
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.sphere.positionBuffer);
+                gl.enableVertexAttribArray(positionAttribute);
+                gl.vertexAttribPointer(positionAttribute, 3, gl.FLOAT, false, 0, 0);
+                
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.sphere.normalBuffer);
+                gl.enableVertexAttribArray(normalAttribute);
+                gl.vertexAttribPointer(normalAttribute, 3, gl.FLOAT, false, 0, 0);
+                
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.sphere.texCoordBuffer);
+                gl.enableVertexAttribArray(texCoordAttribute);
+                gl.vertexAttribPointer(texCoordAttribute, 2, gl.FLOAT, false, 0, 0);
+                
+                // Set up uniforms
+                const modelMatrixLocation = gl.getUniformLocation(program, 'u_modelMatrix');
+                const viewMatrixLocation = gl.getUniformLocation(program, 'u_viewMatrix');
+                const projectionMatrixLocation = gl.getUniformLocation(program, 'u_projectionMatrix');
+                const normalMatrixLocation = gl.getUniformLocation(program, 'u_normalMatrix');
+                
+                const projectionMatrix = new Matrix4().perspective(Math.PI/4, this.canvas.width/this.canvas.height, 0.1, 100);
+                const viewMatrix = new Matrix4().lookAt(this.camera.position, [0, 0, 0], [0, 1, 0]);
+                
+                gl.uniformMatrix4fv(modelMatrixLocation, false, modelMatrix.elements);
+                gl.uniformMatrix4fv(viewMatrixLocation, false, viewMatrix.elements);
+                gl.uniformMatrix4fv(projectionMatrixLocation, false, projectionMatrix.elements);
+                gl.uniformMatrix3fv(normalMatrixLocation, false, modelMatrix.getNormalMatrix());
+                
+                if (isGlowing) {
+                    const timeLocation = gl.getUniformLocation(program, 'u_time');
+                    const cameraPositionLocation = gl.getUniformLocation(program, 'u_cameraPosition');
+                    gl.uniform1f(timeLocation, this.time);
+                    gl.uniform3fv(cameraPositionLocation, this.camera.position);
+                } else {
+                    const planetColorLocation = gl.getUniformLocation(program, 'u_planetColor');
+                    const lightPositionLocation = gl.getUniformLocation(program, 'u_lightPosition');
+                    const cameraPositionLocation = gl.getUniformLocation(program, 'u_cameraPosition');
+                    const timeLocation = gl.getUniformLocation(program, 'u_time');
+                    
+                    gl.uniform3fv(planetColorLocation, color);
+                    gl.uniform3fv(lightPositionLocation, [0, 0, 0]);
+                    gl.uniform3fv(cameraPositionLocation, this.camera.position);
+                    gl.uniform1f(timeLocation, this.time);
+                }
+                
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.sphere.indexBuffer);
+                gl.drawElements(gl.TRIANGLES, this.sphere.indexCount, gl.UNSIGNED_SHORT, 0);
+            }
+            
+            render() {
+                const gl = this.gl;
+                
+                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+                
+                this.updateCamera();
+                
+                const sunMatrix = new Matrix4().scale(1.5, 1.5, 1.5);
+                this.drawCelestialBody(this.sunProgram, sunMatrix, null, true);
+                
+                const earthOrbitRadius = 4;
+                const earthOrbitSpeed = 0.5;
+                const earthRotationSpeed = 2;
+                const earthAngle = this.time * earthOrbitSpeed;
+                
+                const earthMatrix = new Matrix4()
+                    .translate(Math.cos(earthAngle) * earthOrbitRadius, 0, Math.sin(earthAngle) * earthOrbitRadius)
+                    .rotateY(this.time * earthRotationSpeed)
+                    .scale(0.5, 0.5, 0.5);
+                
+                this.drawCelestialBody(this.planetProgram, earthMatrix, [0.2, 0.5, 0.8]);
+                
+      
+                const moonOrbitRadius = 1.2;
+                const moonOrbitSpeed = 3;
+                const moonAngle = this.time * moonOrbitSpeed;
+                
+                const moonMatrix = new Matrix4()
+                    .translate(Math.cos(earthAngle) * earthOrbitRadius, 0, Math.sin(earthAngle) * earthOrbitRadius)
+                    .translate(Math.cos(moonAngle) * moonOrbitRadius, 0, Math.sin(moonAngle) * moonOrbitRadius)
+                    .rotateY(this.time * 1.5)
+                    .scale(0.15, 0.15, 0.15);
+                
+                this.drawCelestialBody(this.planetProgram, moonMatrix, [0.8, 0.8, 0.7]);
+                
+          
+                const marsOrbitRadius = 6.5;
+                const marsOrbitSpeed = 0.3;
+                const marsRotationSpeed = 1.8;
+                const marsAngle = this.time * marsOrbitSpeed;
+                
+                const marsMatrix = new Matrix4()
+                    .translate(Math.cos(marsAngle) * marsOrbitRadius, 0, Math.sin(marsAngle) * marsOrbitRadius)
+                    .rotateY(this.time * marsRotationSpeed)
+                    .scale(0.35, 0.35, 0.35);
+                
+                this.drawCelestialBody(this.planetProgram, marsMatrix, [0.8, 0.3, 0.2]);
+            }
+            
+            animate() {
+                const currentTime = performance.now();
+                const deltaTime = currentTime - this.lastTime;
+                this.lastTime = currentTime;
+                
+                this.time += deltaTime * 0.001;
+                
+                // FPS counter
+                this.fpsCounter++;
+                if (this.fpsCounter % 60 === 0) {
+                    const fps = Math.round(1000 / deltaTime);
+                    document.getElementById('fpsValue').textContent = fps;
+                }
+                
+                this.render();
+                requestAnimationFrame(() => this.animate());
+            }
+        }
+        
+    
+        window.addEventListener('load', () => {
+            new SolarSystem();
+        });
+    </script>
+</body>
+</html>
