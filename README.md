@@ -1,5 +1,6 @@
 # Flam_assignment
 ## SET 1
+* I have chosen questions 1,2 and 3 of set1
 ## Question 1
 
 * Data Structure Design: I use a custom Node class with key, value, and bidirectional pointers, along with dummy nodes (left and right) that act as permanent head and tail markers, simplifying insertion and deletion operations by eliminating edge case handling. 
@@ -16,7 +17,7 @@
 * Get Operation: I hash the key to find the appropriate bucket, then perform a linear search through that bucket's vector to find the matching key and return its associated value, or -1 if not found.
 * Remove Operation: I locate the target bucket, linearly search for the key, and use vector.erase() to remove the element when found, effectively deleting the key-value pair from the map. 
 
-## Question 3
+## Question 4
 # Solar System WebGL Visualization
 
 A comprehensive 3D solar system simulation built with pure WebGL, demonstrating advanced graphics programming concepts including custom shaders, matrix transformations, and interactive camera controls.
